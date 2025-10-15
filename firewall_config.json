@@ -1,0 +1,16 @@
+{
+    "thresholds": {
+        "syn_flood_threshold": 1000,
+        "connection_threshold": 200,
+        "packet_rate_threshold": 1000,
+        "port_scan_threshold": 80,
+        "icmp_flood_threshold": 1000
+    },
+    "whitelist": [
+        "::1",
+        "192.168.98.104",
+        "127.0.0.1"
+    ],
+    "block_duration": 10,
+    "log_level": "INFO"
+}

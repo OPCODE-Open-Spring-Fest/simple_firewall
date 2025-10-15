@@ -1,0 +1,18 @@
+# Core dependencies
+scapy>=2.4.0          # Packet capture and analysis
+psutil>=5.8.0          # System and process utilities
+colorama>=0.4.0        # Cross-platform colored terminal text
+netifaces>=0.11.0      # Network interface detection
+
+# Development dependencies
+pytest>=7.0.0          # Testing framework
+pytest-cov>=4.0.0      # Test coverage
+black>=22.0.0          # Code formatter
+flake8>=5.0.0          # Linting
+isort>=5.10.0          # Import sorting
+
+# Optional dependencies for GUI (future)
+# flask>=2.0.0         # Web framework for GUI
+# fastapi>=0.70.0      # Alternative web framework
+# uvicorn>=0.15.0      # ASGI server
+# websockets>=10.0     # Real-time communication
