@@ -44,7 +44,6 @@ simple_firewall/
 │   └── attack_simulator.py    # Attack simulation for testing
 ├── main.py                    # 🚀 Modern CLI entry point (NEW!)
 ├── firewall_config.json       # ⚙️ Configuration file
-├── run.py                     # 🔄 Legacy launcher (redirects to main.py)
 ├── install.sh                 # 📦 Installation script
 ├── requirements.txt           # 📋 Python dependencies
 ├── package.json              # 📦 Node.js dependencies (dev tools)
@@ -293,19 +292,6 @@ Attack simulation script for testing firewall effectiveness:
 # 2. Port Scan Simulation  
 # 3. ICMP Flood Simulation
 # 4. High Connection Rate Testing
-```
-
-### 🎯 `run.py` - Legacy Launcher Script
-
-Backwards compatibility launcher that redirects to main.py:
-```python
-#!/usr/bin/env python3
-"""Legacy launcher - redirects to main.py"""
-import subprocess
-import sys
-
-if __name__ == "__main__":
-    subprocess.run([sys.executable, "main.py"] + sys.argv[1:])
 ```
 
 

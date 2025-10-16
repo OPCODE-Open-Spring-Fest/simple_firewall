@@ -95,15 +95,6 @@ python3 main.py --create-config
 sudo python3 main.py -v
 ```
 
-### Legacy Commands (Deprecated)
-
-```bash
-# Old run.py launcher (redirects to main.py)
-python3 run.py
-
-# Old direct firewall (moved to simple_firewall_old.py)
-# sudo python3 simple_firewall.py  # NO LONGER AVAILABLE
-```
 
 
 ## Configuration
