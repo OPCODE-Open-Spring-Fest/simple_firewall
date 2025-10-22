@@ -157,7 +157,7 @@ class IPBlocker:
         return result.returncode == 0
     
     def _block_ip_windows(self, ip: str) -> bool:
-        """Block IP using Windows Firewall"""
+        """Block IP using Windows Firewall (netsh)"""
         rule_name = f"SimpleFirewall_Block_{ip.replace('.', '_')}"
         cmd = [
             'netsh', 'advfirewall', 'firewall', 'add', 'rule',
@@ -166,18 +166,38 @@ class IPBlocker:
             'action=block',
             f'remoteip={ip}'
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
-    
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                self.logger.debug(f"netsh add rule stdout: {result.stdout.strip()}")
+                return True
+            else:
+                self.logger.error(f"netsh add rule failed: rc={result.returncode} stdout={result.stdout.strip()} stderr={result.stderr.strip()}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Exception when running netsh add rule: {e}")
+            return False
+
     def _unblock_ip_windows(self, ip: str) -> bool:
-        """Unblock IP using Windows Firewall"""
+        """Unblock IP using Windows Firewall (netsh)"""
         rule_name = f"SimpleFirewall_Block_{ip.replace('.', '_')}"
         cmd = [
             'netsh', 'advfirewall', 'firewall', 'delete', 'rule',
             f'name={rule_name}'
         ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                self.logger.debug(f"netsh delete rule stdout: {result.stdout.strip()}")
+                return True
+            else:
+                # Sometimes netsh returns 1 when rule not found; log and return False
+                self.logger.error(f"netsh delete rule failed: rc={result.returncode} stdout={result.stdout.strip()} stderr={result.stderr.strip()}")
+                return False
+        except Exception as e:
+            self.logger.error(f"Exception when running netsh delete rule: {e}")
+            return False
+
     
     def get_blocked_ips(self) -> Dict[str, str]:
         """Get currently blocked IPs with their block times"""
