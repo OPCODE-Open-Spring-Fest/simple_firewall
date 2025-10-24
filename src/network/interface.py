@@ -34,7 +34,7 @@ class NetworkInterface:
                 for n in names:
                     if 'wi' in n.lower() or 'wifi' in n.lower() or 'wi-fi' in n.lower():
                         return n
-                return names[0] if names else ''
+                return names[0] if names else 'Ethernet'
             else:
                 interfaces = netifaces.interfaces()
 
