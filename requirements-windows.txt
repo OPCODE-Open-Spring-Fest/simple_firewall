@@ -1,8 +1,0 @@
-# This file lists Python packages required *only* for running
-# this project on Windows, which are not in the main requirements.txt.
-
-# psutil (used for Windows-specific interface detection) is
-# already listed in the main requirements.txt as a core
-# dependency for all platforms.
-
-# Future Windows-only dependencies can be added here.

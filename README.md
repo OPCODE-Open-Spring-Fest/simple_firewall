@@ -68,36 +68,6 @@ This firewall uses a **threshold-based detection approach**:
    python3 test_attacks.py 127.0.0.1
    ```
 
-## 🏃 Running on Windows
-
-This program uses `netsh` to manage firewall rules, which requires administrative privileges.
-
-1.  **Open as Administrator:** Right-click on **Command Prompt** or **Windows PowerShell** and select **"Run as administrator"**.
-
-2.  **Navigate to Folder:** Change to the project directory:
-    ```sh
-    cd path\to\simple_firewall
-    ```
-
-3.  **(Optional) Activate Virtual Environment:** If you use a virtual environment:
-    ```sh
-    .\venv\Scripts\activate
-    ```
-
-4.  **Install Requirements:** Install the main requirements and the Windows-specific ones:
-    ```sh
-    pip install -r requirements.txt
-    pip install -r requirements-windows.txt
-    ```
-
-5.  **Run the Program:**
-    ```sh
-    python main.py -i "Your Interface Name"
-    
-    # Example:
-    python main.py -i "Ethernet"
-    ```
-    
 ## Usage
 
 ### Basic Commands
