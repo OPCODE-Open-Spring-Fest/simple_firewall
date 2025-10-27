@@ -96,10 +96,12 @@ class NetworkInterface:
         except Exception as e:
             return {'name': self.interface, 'error': str(e)}
 
-    def list_all_interfaces(self) -> List[str]:
+    @staticmethod
+    def list_all_interfaces() -> List[str]:
         """List all available network interfaces (friendly names preferred on Windows)"""
         try:
-            if self._platform == 'windows' and psutil is not None:
+            current_platform = platform.system().lower()
+            if current_platform == 'windows' and psutil is not None:
                 return list(psutil.net_if_addrs().keys())
             return netifaces.interfaces()
         except Exception:

@@ -19,6 +19,7 @@ sys.path.insert(0, str(src_dir))
 try:
     from firewall.core import SimpleFirewall
     from utils.system import get_system_info, format_bytes
+    from network.interface import list_interfaces # Import function to list network interfaces
     from colorama import Fore, Style, init
     import psutil
 except ImportError as e:
@@ -29,14 +30,30 @@ except ImportError as e:
 # Initialize colorama
 init(autoreset=True)
 
+# --- ASCII Art Banner ---
+FIREWALL_BANNER = f"""
+{Fore.LIGHTMAGENTA}
+  _____ _                 _       __        __
+ |  ___(_)               | |      \ \      / /
+ | |__  _ _ __ ___  _   _| | ___   \ \    / / 
+ |  __|| | '_ ` _ \| | | | |/ _ \   > \  / <  
+ | |___| | | | | | | |_| | |  __/  / /\ \  /\ \\
+ \____/|_|_| |_| |_|\__, |_|\___| /_/  \_\/_/  
+                     __/ |                  
+                    |___/                   
+{Style.RESET_ALL}
+Simple DDoS/DoS Protection Firewall
+"""
+
+def display_banner():
+    """Displays the ASCII art banner."""
+    print(FIREWALL_BANNER)
 
 def show_system_stats():
     """Show system network statistics"""
     print(f"{Fore.CYAN}=== System Network Statistics ==={Style.RESET_ALL}")
     
     try:
-        import psutil
-        
         # Network stats
         net_stats = psutil.net_io_counters()
         print(f"Bytes sent: {format_bytes(net_stats.bytes_sent)}")
@@ -57,7 +74,8 @@ def show_system_stats():
         addrs = psutil.net_if_addrs()
         print(f"\n{Fore.GREEN}=== Network Interfaces ==={Style.RESET_ALL}")
         for interface, addresses in addrs.items():
-            if not interface.startswith(('lo', 'docker', 'veth')):
+            # Filter out loopback, docker, virtual, and bridge interfaces by default
+            if not interface.startswith(('lo', 'docker', 'veth', 'br-')):
                 print(f"{interface}:")
                 for addr in addresses:
                     if addr.family.name in ['AF_INET', 'AF_INET6']:
@@ -108,8 +126,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                          # Start with default settings
-  %(prog)s -i eth0                  # Monitor specific interface
+  %(prog)s                          # Start with interactive interface selection
+  %(prog)s -i eth0                  # Monitor specific interface (overrides interactive selection)
   %(prog)s -c custom_config.json    # Use custom config file
   %(prog)s --stats                  # Show system statistics
   %(prog)s --create-config          # Create sample config file
@@ -117,7 +135,7 @@ Examples:
     )
     
     parser.add_argument('-i', '--interface', 
-                       help='Network interface to monitor (auto-detected if not specified)')
+                       help='Network interface to monitor (interactive selection if not specified)')
     parser.add_argument('-c', '--config', 
                        help='Configuration file path (default: firewall_config.json)')
     parser.add_argument('--stats', action='store_true', 
@@ -130,7 +148,7 @@ Examples:
     
     args = parser.parse_args()
     
-    # Handle special commands
+    # Handle special commands (stats, create-config) which should exit early
     if args.stats:
         show_system_stats()
         return
@@ -138,34 +156,81 @@ Examples:
     if args.create_config:
         create_sample_config()
         return
+
+    # Display banner for normal operation (not for stats or config creation)
+    display_banner()
     
-    # Create and start firewall
-    try:
-        firewall = SimpleFirewall(
-            interface=args.interface, 
-            config_file=args.config
-        )
+    selected_interface = None
+
+    # Determine the network interface to monitor
+    if args.interface:
+        # If interface is specified via command-line argument, use it directly
+        selected_interface = args.interface
+        print(f"{Fore.CYAN}Monitoring interface specified via --interface: {selected_interface}{Style.RESET_ALL}")
+    else:
+        # Otherwise, engage interactive selection
+        available_interfaces = list_interfaces()
         
-        # Setup signal handlers for graceful shutdown
-        def signal_handler(signum, frame):
-            print(f"\n{Fore.YELLOW}Signal {signum} received, shutting down...{Style.RESET_ALL}")
-            firewall.stop()
+        if not available_interfaces:
+            print(f"{Fore.RED}No active network interfaces found. Cannot proceed.{Style.RESET_ALL}")
+            sys.exit(1)
+        
+        print(f"\n{Fore.GREEN}Select a network interface to monitor:{Style.RESET_ALL}")
+        for i, iface in enumerate(available_interfaces):
+            print(f"  {i+1}. {iface}")
+        print(f"  {Fore.YELLOW}0. Exit{Style.RESET_ALL}")
+        
+        while selected_interface is None:
+            try:
+                choice = input(f"{Fore.CYAN}Enter your choice (0-{len(available_interfaces)}): {Style.RESET_ALL}").strip()
+                choice_int = int(choice)
+                
+                if choice_int == 0:
+                    print(f"{Fore.YELLOW}Exiting program.{Style.RESET_ALL}")
+                    sys.exit(0)
+                elif 1 <= choice_int <= len(available_interfaces):
+                    selected_interface = available_interfaces[choice_int - 1]
+                    print(f"{Fore.GREEN}Selected interface: {selected_interface}{Style.RESET_ALL}")
+                else:
+                    print(f"{Fore.RED}Invalid choice. Please enter a number between 0 and {len(available_interfaces)}.{Style.RESET_ALL}")
+            except ValueError:
+                print(f"{Fore.RED}Invalid input. Please enter a number.{Style.RESET_ALL}")
+            except KeyboardInterrupt:
+                print(f"\n{Fore.YELLOW}Interrupted during selection, exiting.{Style.RESET_ALL}")
+                sys.exit(0)
+
+    # Proceed only if an interface has been successfully selected
+    if selected_interface:
+        try:
+            firewall = SimpleFirewall(
+                interface=selected_interface, 
+                config_file=args.config
+            )
+            
+            # Setup signal handlers for graceful shutdown
+            def signal_handler(signum, frame):
+                print(f"\n{Fore.YELLOW}Signal {signum} received, shutting down...{Style.RESET_ALL}")
+                firewall.stop()
+                sys.exit(0)
+            
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+            
+            # Start the firewall
+            firewall.start()
+            
+        except KeyboardInterrupt:
+            print(f"\n{Fore.YELLOW}Interrupted by user{Style.RESET_ALL}")
             sys.exit(0)
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Start the firewall
-        firewall.start()
-        
-    except KeyboardInterrupt:
-        print(f"\n{Fore.YELLOW}Interrupted by user{Style.RESET_ALL}")
-        sys.exit(0)
-    except Exception as e:
-        print(f"{Fore.RED}Fatal error: {e}{Style.RESET_ALL}")
-        if args.verbose:
-            print(f"\n{Fore.RED}Traceback:{Style.RESET_ALL}")
-            traceback.print_exc()
+        except Exception as e:
+            print(f"{Fore.RED}Fatal error: {e}{Style.RESET_ALL}")
+            if args.verbose:
+                print(f"\n{Fore.RED}Traceback:{Style.RESET_ALL}")
+                traceback.print_exc()
+            sys.exit(1)
+    else:
+        # This branch should theoretically not be reached if previous logic is sound
+        print(f"{Fore.RED}No network interface was selected. Exiting.{Style.RESET_ALL}")
         sys.exit(1)
 
 
