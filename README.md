@@ -134,7 +134,7 @@ Edit `firewall_config.json` to customize thresholds:
 ```json
 {
     "thresholds": {
-        "syn_flood_threshold": 100,     // SYN packets per minute
+        "syn_flood_threshold": 100,  // SYN packets per minute
         "connection_threshold": 50,      // Connections per IP per minute
         "packet_rate_threshold": 1000,   // Total packets per IP per minute
         "port_scan_threshold": 20,       // Different ports accessed per minute
