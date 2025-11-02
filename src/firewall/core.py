@@ -4,7 +4,7 @@ import threading
 import time
 import signal
 import sys
-from scapy.all import sniff
+from scapy.all import sniff,AsyncSniffer
 from colorama import Fore, Style
 from typing import Optional
 
@@ -41,6 +41,9 @@ class SimpleFirewall:
         # Control flags
         self.running = False
         self._threads = []
+
+        self._sniffer = None
+        self._stop_event = threading.Event()
         
         self.logger.info("Simple Firewall initialized successfully")
     
@@ -167,26 +170,32 @@ class SimpleFirewall:
             self.stop()
     
     def stop(self):
-        """Stop the firewall and cleanup"""
+        """Stop the firewall and cleanup - ENHANCED VERSION"""
+        if not self.running:
+            return
+            
         print(f"\n{Fore.YELLOW}Stopping firewall...{Style.RESET_ALL}")
         self.running = False
+        self._stop_event.set()
         
-        # Wait for threads to finish (with timeout)
+        if self._sniffer and self._sniffer.running:
+            self._sniffer.stop()
+        
+        timeout = 3.0
+        start_time = time.time()
+        
         for thread in self._threads:
             if thread.is_alive():
-                thread.join(timeout=2.0)
+                remaining_time = timeout - (time.time() - start_time)
+                if remaining_time > 0:
+                    thread.join(timeout=remaining_time)
         
-        # Display final stats
-        self._display_stats()
-        
-        # Cleanup firewall rules
-        print(f"{Fore.YELLOW}Cleaning up firewall rules...{Style.RESET_ALL}")
         cleaned_ips = self.blocker.cleanup_all_blocks()
         if cleaned_ips:
             self.logger.info(f"Cleaned up blocks for {len(cleaned_ips)} IPs")
         
-        print(f"{Fore.GREEN}Firewall stopped.{Style.RESET_ALL}")
-        self.logger.info("Simple Firewall stopped")
+        self._display_stats()
+        print(f"{Fore.GREEN}Firewall stopped successfully.{Style.RESET_ALL}")
     
     def get_status(self) -> dict:
         """Get current firewall status"""
