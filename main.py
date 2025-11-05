@@ -10,11 +10,15 @@ import argparse
 import signal
 import traceback
 from pathlib import Path
+import threading
+import time
 
 # Add src directory to Python path for absolute imports
 current_dir = Path(__file__).parent
 src_dir = current_dir / 'src'
 sys.path.insert(0, str(src_dir))
+_SHUTDOWN_INITIATED = False
+_SHUTDOWN_LOCK = threading.Lock()
 
 try:
     from firewall.core import SimpleFirewall
@@ -148,15 +152,34 @@ Examples:
         
         # Setup signal handlers for graceful shutdown
         def signal_handler(signum, frame):
-            print(f"\n{Fore.YELLOW}Signal {signum} received, shutting down...{Style.RESET_ALL}")
-            firewall.stop()
-            sys.exit(0)
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-        
-        # Start the firewall
-        firewall.start()
+            """Enhanced signal handler with timeout and state tracking"""
+            global _SHUTDOWN_INITIATED
+            
+            with _SHUTDOWN_LOCK:
+                if _SHUTDOWN_INITIATED:
+                    print(f"\n{Fore.RED}Forced shutdown initiated...{Style.RESET_ALL}")
+                    os._exit(1)
+                    
+                _SHUTDOWN_INITIATED = True
+            
+            print(f"\n{Fore.YELLOW}Signal {signum} received, initiating graceful shutdown...{Style.RESET_ALL}")
+            
+            def force_shutdown():
+                time.sleep(5)
+                print(f"\n{Fore.RED}Graceful shutdown timeout, forcing exit...{Style.RESET_ALL}")
+                os._exit(1)
+            
+            force_thread = threading.Thread(target=force_shutdown, daemon=True)
+            force_thread.start()
+            
+            try:
+                if 'firewall' in locals():
+                    firewall.stop()
+                print(f"{Fore.GREEN}Firewall shutdown completed successfully.{Style.RESET_ALL}")
+                sys.exit(0)
+            except Exception as e:
+                print(f"{Fore.RED}Error during shutdown: {e}{Style.RESET_ALL}")
+                os._exit(1)
         
     except KeyboardInterrupt:
         print(f"\n{Fore.YELLOW}Interrupted by user{Style.RESET_ALL}")
