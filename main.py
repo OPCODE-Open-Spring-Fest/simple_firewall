@@ -13,6 +13,18 @@ from pathlib import Path
 import threading
 import time
 
+
+ASCII_ART=r"""
+     _                 _         __ _                        _ _ 
+    (_)               | |       / _(_)                      | | |
+ ___ _ _ __ ___  _ __ | | ___  | |_ _ _ __ _____      ____ _| | |
+/ __| | '_ ` _ \| '_ \| |/ _ \ |  _| | '__/ _ \ \ /\ / / _` | | |
+\__ \ | | | | | | |_) | |  __/ | | | | | |  __/\ V  V / (_| | | |
+|___/_|_| |_| |_| .__/|_|\___| |_| |_|_|  \___| \_/\_/ \__,_|_|_|
+                | |                                              
+                |_|                                              
+"""
+
 # Add src directory to Python path for absolute imports
 current_dir = Path(__file__).parent
 src_dir = current_dir / 'src'
@@ -70,6 +82,17 @@ def show_system_stats():
     except Exception as e:
         print(f"Error getting stats: {e}")
 
+def get_available_interfaces():
+    """Get a list of non-loopback/docker network interfaces."""
+    interfaces = []
+    try:
+        addrs = psutil.net_if_addrs()
+        for interface, addresses in addrs.items():
+            if not interface.startswith(('lo', 'docker', 'veth', 'br-')):
+                interfaces.append(interface)
+    except Exception as e:
+        print(f"{Fore.RED}Error getting interfaces: {e}{Style.RESET_ALL}")
+    return interfaces
 
 def create_sample_config():
     """Create a sample configuration file"""
@@ -111,26 +134,26 @@ def main():
         description='Simple DDoS/DoS Protection Firewall',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  %(prog)s                          # Start with default settings
-  %(prog)s -i eth0                  # Monitor specific interface
-  %(prog)s -c custom_config.json    # Use custom config file
-  %(prog)s --stats                  # Show system statistics
-  %(prog)s --create-config          # Create sample config file
-        """
+        Examples:
+        %(prog)s                       # Start interactively
+        %(prog)s -i eth0               # Monitor specific interface
+        %(prog)s -c custom_config.json # Use custom config file
+        %(prog)s --stats               # Show system statistics
+        %(prog)s --create-config       # Create sample config file
+                """
     )
     
     parser.add_argument('-i', '--interface', 
-                       help='Network interface to monitor (auto-detected if not specified)')
+                        help='Network interface to monitor (auto-detected if not specified)')
     parser.add_argument('-c', '--config', 
-                       help='Configuration file path (default: firewall_config.json)')
+                        help='Configuration file path (default: firewall_config.json)')
     parser.add_argument('--stats', action='store_true', 
-                       help='Show system network statistics and exit')
+                        help='Show system network statistics and exit')
     parser.add_argument('--create-config', action='store_true',
-                       help='Create sample configuration file and exit')
+                        help='Create sample configuration file and exit')
     parser.add_argument('--version', action='version', version='Simple Firewall 1.0.0')
     parser.add_argument('-v', '--verbose', action='store_true',
-                       help='Enable verbose logging')
+                        help='Enable verbose logging')
     
     args = parser.parse_args()
     
@@ -142,11 +165,54 @@ Examples:
     if args.create_config:
         create_sample_config()
         return
-    
-    # Create and start firewall
+
+    selected_interface = None
+
+    if args.interface:
+        selected_interface = args.interface
+    else:
+        
+        print(f"{Fore.GREEN}{ASCII_ART}{Style.RESET_ALL}") 
+        separator = "-" * 25
+        print(separator)
+        try:
+            sys_info = get_system_info()
+            print(f"OS detected: {sys_info['platform']}")
+        except Exception:
+            print(f"{Fore.YELLOW}Could not detect OS.{Style.RESET_ALL}")
+        
+        print(separator)
+        interfaces = get_available_interfaces()
+        if not interfaces:
+            print(f"{Fore.RED}No suitable network interfaces found.{Style.RESET_ALL}")
+            sys.exit(1)
+            
+        print("\nAvailable network interfaces:")
+        print("[0] Exit")
+        for i, iface in enumerate(interfaces, 1):
+            print(f"[{i}] {iface}")
+        while True:
+            try:
+                choice_str = input(f"\nSelect an interface (0-{len(interfaces)}): ")
+                choice = int(choice_str)
+                
+                if choice == 0:
+                    print("Exiting.")
+                    sys.exit(0)
+                elif 1 <= choice <= len(interfaces):
+                    selected_interface = interfaces[choice - 1]
+                    break
+                else:
+                    print(f"{Fore.YELLOW}Invalid choice. Please enter a number between 0 and {len(interfaces)}.{Style.RESET_ALL}")
+            except ValueError:
+                print(f"{Fore.YELLOW}Invalid input. Please enter a number.{Style.RESET_ALL}")
+            except (KeyboardInterrupt, EOFError):
+                print("\nExiting.")
+                sys.exit(0)
     try:
+        # Use the interface chosen either by argument or menu
         firewall = SimpleFirewall(
-            interface=args.interface, 
+            interface=selected_interface, 
             config_file=args.config
         )
         
@@ -181,6 +247,17 @@ Examples:
                 print(f"{Fore.RED}Error during shutdown: {e}{Style.RESET_ALL}")
                 os._exit(1)
         
+        # Register signal handlers
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+
+        print(f"{Fore.CYAN}Starting firewall on interface: {selected_interface}{Style.RESET_ALL}")
+        firewall.start()
+
+        # Keep main thread alive
+        while firewall.is_running():
+            time.sleep(1)
+            
     except KeyboardInterrupt:
         print(f"\n{Fore.YELLOW}Interrupted by user{Style.RESET_ALL}")
         sys.exit(0)
