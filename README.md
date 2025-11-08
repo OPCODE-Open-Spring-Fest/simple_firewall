@@ -125,6 +125,49 @@ python3 main.py --create-config
 sudo python3 main.py -v
 ```
 
+# 🐳 Running with Docker
+
+Using Docker is the recommended way to run the firewall, as it automatically manages all dependencies and network permissions.
+
+---
+
+## ✅ Prerequisites
+
+Make sure you have the following installed:
+
+- **Docker**
+- **Docker Compose**  
+  *(Docker Desktop for Windows/macOS includes both.)*
+
+---
+
+
+### **1. Build and Run**
+
+Open your terminal in the project’s root directory and run:
+
+```bash
+docker-compose run --rm firewall
+```
+
+The image will build the **first time** you run this command.
+
+`--rm` ensures the container is automatically removed when it stops.
+
+---
+
+## 2. Select Network Interface
+
+After the container starts, you will be prompted to choose the interface:
+
+Select an interface (0–2): 2
+
+
+---
+
+## ✅ To Stop
+
+Press: Ctrl + C
 
 
 ## Configuration
