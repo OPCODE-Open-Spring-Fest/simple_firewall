@@ -97,6 +97,115 @@ This program uses `netsh` to manage firewall rules, which requires administrativ
     # Example:
     python main.py -i "Ethernet"
     ```
+
+## 🍎 Running on macOS
+
+This program uses `pfctl` (Packet Filter Control) to manage firewall rules, which requires administrative privileges.
+
+### Prerequisites
+
+- **macOS 10.5+**
+- **Administrator privileges** 
+- **Python 3.6+**
+
+### Setup Instructions
+
+1. **Open Terminal:** Open the Terminal application (found in Applications > Utilities)
+
+2. **Navigate to Project Directory:**
+   ```bash
+   cd path/to/simple_firewall
+   ```
+
+3. **(Optional) Create Virtual Environment:**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+4. **Install Requirements:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Create Configuration File:**
+   ```bash
+   python3 main.py --create-config
+   ```
+
+6. **Run the Firewall:**
+   ```bash
+   sudo python3 main.py
+   ```
+   
+   Or specify an interface:
+   ```bash
+   sudo python3 main.py -i en0
+   ```
+
+### macOS Firewall Management
+
+The firewall uses `pfctl` to manage blocking rules:
+
+- **Automatic Setup:** On first run, the firewall automatically:
+  - Creates a `blocked_ips` table in pfctl
+  - Enables pfctl if not already enabled
+  - Loads blocking rules from a temporary configuration file
+
+- **Blocking Mechanism:** IPs are added to a pfctl table, and rules block all traffic from/to those IPs
+
+- **Automatic Cleanup:** When the firewall stops, all blocked IPs are automatically removed
+
+### Managing pfctl Manually
+
+If you need to manually manage the firewall:
+
+```bash
+# View currently blocked IPs
+sudo pfctl -t blocked_ips -T show
+
+# Remove a specific IP manually
+sudo pfctl -t blocked_ips -T delete <IP_ADDRESS>
+
+# Flush all blocked IPs
+sudo pfctl -t blocked_ips -T flush
+
+# Check pfctl status
+sudo pfctl -s info
+
+# View current rules
+sudo pfctl -s rules
+```
+
+### Troubleshooting macOS
+
+**Issue: "pfctl: command not found"**
+- This shouldn't happen on macOS, but if it does, ensure you're running a supported macOS version
+
+**Issue: "pfctl: Permission denied"**
+- Make sure you're running with `sudo`
+- Some macOS versions may require additional permissions
+
+**Issue: "pfctl: cannot enable"**
+- macOS System Preferences may have the built-in firewall enabled
+- You may need to disable it in System Preferences > Security & Privacy > Firewall
+- Or allow pfctl to run by granting Full Disk Access in System Preferences
+
+**Issue: Interface not found**
+- List available interfaces: `ifconfig` or `networksetup -listallhardwareports`
+- Common macOS interfaces: `en0` (Ethernet), `en1` (Wi-Fi), `en2` (USB Ethernet)
+
+**Issue: Blocks not working**
+- Check if pfctl is enabled: `sudo pfctl -s info`
+- Verify rules are loaded: `sudo pfctl -s rules`
+- Check if IPs are in the table: `sudo pfctl -t blocked_ips -T show`
+
+### macOS-Specific Notes
+
+- **System Firewall:** macOS has a built-in firewall in System Preferences. The Simple Firewall works alongside it but uses pfctl directly
+- **Interface Names:** macOS uses names like `en0`, `en1`, etc. (not `eth0` like Linux)
+- **Root Access:** Always run with `sudo` for firewall operations
+- **Temporary Rules:** The firewall creates temporary pf.conf files that are automatically managed
     
 ## Usage
 
@@ -306,8 +415,11 @@ src/
 ## Requirements
 
 - **Python 3.6+**
-- **Root privileges** (required for iptables access)
-- **Linux system** (uses iptables for blocking)
+- **Root/Administrator privileges** (required for firewall access)
+- **Supported Platforms:**
+  - **Linux:** Uses iptables for blocking
+  - **macOS:** Uses pfctl (Packet Filter) for blocking
+  - **Windows:** Uses netsh (Windows Firewall) for blocking
 
 ### Python Packages:
 - `scapy` - Packet capture and analysis
@@ -389,6 +501,27 @@ sudo iptables -D INPUT -s [IP_ADDRESS] -j DROP
 sudo iptables -F INPUT
 ```
 
+**macOS (pfctl):**
+```bash
+# View blocked IPs in table
+sudo pfctl -t blocked_ips -T show
+
+# Remove specific IP
+sudo pfctl -t blocked_ips -T delete [IP_ADDRESS]
+
+# Flush all blocked IPs
+sudo pfctl -t blocked_ips -T flush
+```
+
+**Windows (netsh):**
+```powershell
+# List firewall rules
+netsh advfirewall firewall show rule name=all
+
+# Delete specific rule (replace IP_ADDRESS with actual IP)
+netsh advfirewall firewall delete rule name="SimpleFirewall_Block_[IP_ADDRESS]"
+```
+
 ## Current Limitations & Known Issues
 
 ⚠️ **Platform Limitations:**
@@ -448,6 +581,7 @@ This is an **educational open-source project** designed to help people learn net
 - **Performance:** Optimize packet processing and memory usage
 - **Testing:** Add unit tests and integration tests
 - **Documentation:** Improve code comments and examples
+- **IPv6 Support:** Extend blocking to IPv6 addresses
 
 ### 📋 **Current Architecture Issues to Fix:**
 - Replace hardcoded magic numbers with named constants
