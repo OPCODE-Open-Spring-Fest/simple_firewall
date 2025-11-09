@@ -1,0 +1,10 @@
+services:
+  firewall:
+    build: .
+    container_name: firewall
+    
+    cap_add:
+      - NET_ADMIN
+    network_mode: "host"
+    
+    restart: unless-stopped
