@@ -3,7 +3,10 @@
 import subprocess
 import threading
 import platform
+import tempfile
+import shutil
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Dict, Set, List
 from colorama import Fore, Style
 from utils.logger import get_logger
@@ -21,6 +24,10 @@ class IPBlocker:
         self.logger = get_logger(__name__)
         self.platform = platform.system().lower()
         self.firewall_cmd = get_platform_firewall_command()
+        
+        # macOS-specific: pfctl configuration
+        if self.platform == 'darwin':
+            self._init_macos_firewall()
     
     def block_ip(self, ip: str, reason: str) -> bool:
         """Block an IP address using the appropriate firewall system"""
@@ -138,23 +145,114 @@ class IPBlocker:
         result = subprocess.run(cmd, capture_output=True, text=True)
         return result.returncode == 0
     
+    def _init_macos_firewall(self):
+        """Initialize macOS firewall (pfctl) - create table and rules"""
+        try:
+            # Check if pfctl is available
+            pfctl_path = shutil.which('pfctl')
+            if not pfctl_path:
+                self.logger.warning("pfctl not found.")
+                return
+
+            cmd = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'show']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                # if doesn't exist, create dummy
+                subprocess.run(['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'add', '127.0.0.1'], 
+                             capture_output=True, text=True)
+                subprocess.run(['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'delete', '127.0.0.1'], 
+                             capture_output=True, text=True)
+
+            cmd = ['sudo', 'pfctl', '-s', 'info']
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if 'Status: Enabled' not in result.stdout:
+                # Try to enable pfctl (may require user interaction)
+                self.logger.info("Attempting to enable pfctl...")
+                subprocess.run(['sudo', 'pfctl', '-e'], capture_output=True, text=True)
+            
+            self._reload_macos_rules()
+            
+            self.logger.info("macOS firewall initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize macOS firewall: {e}")
+    
+    def _reload_macos_rules(self):
+        """Reload pfctl rules to ensure blocking rule is active"""
+        try:
+
+            pf_conf_content = """# Simple Firewall - Dynamic IP Blocking Rules
+# This file is managed by Simple Firewall
+# DO NOT EDIT MANUALLY
+
+# Table for blocked IPs
+table <blocked_ips> persist
+
+# Block all traffic from IPs in the blocked_ips table
+block drop in quick from <blocked_ips> to any
+block drop out quick from any to <blocked_ips>
+
+# Allow all other traffic (pass through)
+pass in all
+pass out all
+"""
+            temp_dir = Path(tempfile.gettempdir())
+            pf_conf_path = temp_dir / 'simple_firewall_pf.conf'
+            
+            with open(pf_conf_path, 'w') as f:
+                f.write(pf_conf_content)
+            
+            cmd = ['sudo', 'pfctl', '-f', str(pf_conf_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                self.logger.debug("pfctl rules loaded successfully")
+            else:
+                self.logger.warning(f"pfctl rule loading returned: {result.returncode}")
+                self.logger.debug(f"pfctl stderr: {result.stderr}")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to reload macOS firewall rules: {e}")
+    
     def _block_ip_macos(self, ip: str) -> bool:
         """Block IP using pfctl on macOS"""
-        # First, add IP to a table
-        cmd1 = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'add', ip]
-        result1 = subprocess.run(cmd1, capture_output=True, text=True)
-        
-        # Then enable the blocking rule (this might need to be done once)
-        cmd2 = ['sudo', 'pfctl', '-e']
-        result2 = subprocess.run(cmd2, capture_output=True, text=True)
-        
-        return result1.returncode == 0
+        try:
+            # First, add IP to a table
+            cmd = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'add', ip]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                self.logger.debug(f"Successfully added {ip} to blocked_ips table")
+                return True
+            else:
+
+                if 'already' in result.stderr.lower() or 'duplicate' in result.stderr.lower():
+                    self.logger.debug(f"IP {ip} already in blocked_ips table")
+                    return True
+                else:
+                    self.logger.error(f"Failed to add {ip} to blocked_ips table: {result.stderr}")
+                    return False
+        except Exception as e:
+            self.logger.error(f"Exception while blocking IP {ip} on macOS: {e}")
+            return False
     
     def _unblock_ip_macos(self, ip: str) -> bool:
         """Unblock IP using pfctl on macOS"""
-        cmd = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'delete', ip]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0
+        try:
+            cmd = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'delete', ip]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode == 0:
+                self.logger.debug(f"Successfully removed {ip} from blocked_ips table")
+                return True
+            else:
+                if 'not found' in result.stderr.lower() or 'does not exist' in result.stderr.lower():
+                    self.logger.debug(f"IP {ip} not found in blocked_ips table (may have been already removed)")
+                    return True
+                else:
+                    self.logger.warning(f"Failed to remove {ip} from blocked_ips table: {result.stderr}")
+                    return False
+        except Exception as e:
+            self.logger.error(f"Exception while unblocking IP {ip} on macOS: {e}")
+            return False
     
     def _block_ip_windows(self, ip: str) -> bool:
         """Block IP using Windows Firewall (netsh)"""
@@ -215,6 +313,16 @@ class IPBlocker:
             for ip in list(self.blocked_ips.keys()):
                 if self.unblock_ip(ip):
                     cleaned_ips.append(ip)
+        
+        # macOS-specific: Clean up the entire table on shutdown
+        if self.platform == 'darwin' and cleaned_ips:
+            try:
+                cmd = ['sudo', 'pfctl', '-t', 'blocked_ips', '-T', 'flush']
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    self.logger.info("Cleaned up all blocked IPs from pfctl table")
+            except Exception as e:
+                self.logger.warning(f"Failed to flush pfctl table: {e}")
         
         return cleaned_ips
     
